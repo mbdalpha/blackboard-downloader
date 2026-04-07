@@ -84,7 +84,7 @@ Blackboard/
 
 - **Re-running is safe** — already downloaded files are skipped
 - **External links are not downloaded** (e.g. files hosted on Google Drive or OneDrive)
-- Tested on Blackboard Learn SaaS (Ultra experience) at Boston University
+- Tested on Blackboard Learn SaaS (Ultra experience) at Boston University (learn.bu.edu)
 
 ## Contributing
 
