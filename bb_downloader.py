@@ -25,6 +25,12 @@ CONTAINER_HANDLERS = {
     "resource/x-bb-blankpage",
 }
 
+# Nodes that should create a subfolder on disk when recursed into.
+FOLDER_HANDLERS = {
+    "resource/x-bb-folder",
+    "resource/x-bb-lesson",
+}
+
 DEFAULT_EXTENSIONS = {".pdf"}
 
 
@@ -240,16 +246,19 @@ def get_top_level_sections(session, base_url, course_id):
 def collect_files_recursive(session, base_url, course_id, item_id, extensions):
     """
     Recursively collect all downloadable files under item_id.
-    Returns list of {"url": ..., "filename": ...}
+    Returns list of {"url": ..., "filename": ..., "rel_path": [folder, subfolder, ...]}
+    where rel_path mirrors the Blackboard folder/lesson hierarchy below item_id.
     """
     files = []
 
-    def fetch(node_id):
+    def fetch(node_id, rel_path):
         # Fetch node detail (contains body HTML)
         detail_resp = session.get(f"{base_url}/learn/api/public/v1/courses/{course_id}/contents/{node_id}")
         if detail_resp.status_code == 200:
             body = detail_resp.json().get("body", "")
-            files.extend(_extract_from_body(body, base_url, extensions))
+            for f in _extract_from_body(body, base_url, extensions):
+                f["rel_path"] = list(rel_path)
+                files.append(f)
 
         # Fetch traditional attachments
         att_resp = session.get(f"{base_url}/learn/api/public/v1/courses/{course_id}/contents/{node_id}/attachments")
@@ -262,7 +271,7 @@ def collect_files_recursive(session, base_url, course_id, item_id, extensions):
                         f"{base_url}/learn/api/public/v1/courses/{course_id}"
                         f"/contents/{node_id}/attachments/{att['id']}/download"
                     )
-                    files.append({"url": dl_url, "filename": filename})
+                    files.append({"url": dl_url, "filename": filename, "rel_path": list(rel_path)})
 
         # Recurse into children
         children_resp = session.get(
@@ -270,9 +279,17 @@ def collect_files_recursive(session, base_url, course_id, item_id, extensions):
         )
         if children_resp.status_code == 200:
             for child in children_resp.json().get("results", []):
-                fetch(child.get("id"))
+                child_id = child.get("id")
+                if not child_id:
+                    continue
+                handler = (child.get("contentHandler") or {}).get("id", "")
+                if handler in FOLDER_HANDLERS:
+                    child_name = _safe(child.get("title", "Untitled"))
+                    fetch(child_id, rel_path + [child_name])
+                else:
+                    fetch(child_id, rel_path)
 
-    fetch(item_id)
+    fetch(item_id, [])
     return files
 
 
@@ -484,7 +501,8 @@ def main():
                 section_dir = course_dir / section["name"]
                 files = collect_files_recursive(session, base_url, course["id"], section["id"], extensions)
                 for f in files:
-                    dest = section_dir / _safe(f["filename"])
+                    subdirs = [_safe(p) for p in f.get("rel_path", []) if p]
+                    dest = section_dir.joinpath(*subdirs, _safe(f["filename"]))
                     if download_file(session, f["url"], dest):
                         total += 1
 
