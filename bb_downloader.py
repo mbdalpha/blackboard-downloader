@@ -140,12 +140,86 @@ def pick_term(term_map):
             all_courses = [c for courses in term_map.values() for c in courses]
             return all_courses
         if raw.isdigit() and 1 <= int(raw) <= len(terms):
-            selected = term_map[terms[int(raw) - 1]]
-            print(f"\nCourses in selected term:")
-            for c in selected:
-                print(f"  - {c['name']}")
-            return selected
+            return term_map[terms[int(raw) - 1]]
         print("  Invalid input, try again.")
+
+
+def pick_courses(courses):
+    """
+    Interactive multi-select course picker.
+    Accepts: 'all' / blank, comma-separated indices, hyphen ranges, or a mix
+    (e.g. '1,3,5', '1-3', '1-3,5,7-9'). Returns the chosen subset in original order.
+    """
+    print("\nCourses in selected term:")
+    for i, c in enumerate(courses, 1):
+        print(f"  [{i}] {c['name']}")
+    print("\nEnter course numbers to download (e.g. 1,3,5 or 1-3,5).")
+    print("Press Enter or type 'all' for every course.")
+
+    while True:
+        raw = input("  > ").strip().lower()
+        if raw == "" or raw == "all":
+            return courses
+
+        chosen = set()
+        ok = True
+        for token in raw.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            if "-" in token:
+                parts = token.split("-")
+                if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+                    ok = False
+                    break
+                a, b = int(parts[0]), int(parts[1])
+                if a > b:
+                    a, b = b, a
+                for n in range(a, b + 1):
+                    if not 1 <= n <= len(courses):
+                        ok = False
+                        break
+                    chosen.add(n)
+                if not ok:
+                    break
+            else:
+                if not token.isdigit():
+                    ok = False
+                    break
+                n = int(token)
+                if not 1 <= n <= len(courses):
+                    ok = False
+                    break
+                chosen.add(n)
+
+        if not ok or not chosen:
+            print("  Invalid input, try again.")
+            continue
+
+        selected = [courses[i - 1] for i in sorted(chosen)]
+        print("\nSelected courses:")
+        for c in selected:
+            print(f"  - {c['name']}")
+        return selected
+
+
+def filter_courses_by_query(courses, queries):
+    """Filter courses by case-insensitive substring match against name or course code."""
+    queries_lc = [q.lower() for q in queries]
+    matched = []
+    seen_match = {q: False for q in queries_lc}
+    for c in courses:
+        name_lc = c["name"].lower()
+        code_lc = c.get("course_code", "").lower()
+        for q in queries_lc:
+            if q in name_lc or q in code_lc:
+                matched.append(c)
+                seen_match[q] = True
+                break
+    for q, hit in seen_match.items():
+        if not hit:
+            print(f"  Warning: no course matched '{q}'")
+    return matched
 
 
 # ── Content traversal ─────────────────────────────────────────────────────────
@@ -288,6 +362,7 @@ def parse_args():
 Examples:
   python3 bb_downloader.py
   python3 bb_downloader.py --url learn.bu.edu --output ~/Desktop/BB --ext .pdf .pptx
+  python3 bb_downloader.py --courses CSU33012 "Machine Learning"
         """
     )
     parser.add_argument(
@@ -305,6 +380,13 @@ Examples:
         nargs="+",
         default=None,
         help="File extensions to download, e.g. --ext .pdf .pptx .docx (prompted if not provided)"
+    )
+    parser.add_argument(
+        "--courses",
+        nargs="+",
+        default=None,
+        help="Course names or IDs to download (substring match, case-insensitive). "
+             "Skips the interactive course picker. Example: --courses CSU33012 'Machine Learning'"
     )
     return parser.parse_args()
 
@@ -377,6 +459,13 @@ def main():
             return
 
         courses = pick_term(term_map)
+        if args.courses:
+            courses = filter_courses_by_query(courses, args.courses)
+            if not courses:
+                print("No courses matched --courses filter.")
+                return
+        else:
+            courses = pick_courses(courses)
 
         print(f"\nStarting download for {len(courses)} course(s)...\n")
         total = 0

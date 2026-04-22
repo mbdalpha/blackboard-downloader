@@ -6,6 +6,7 @@ Automatically download course files from any **Blackboard Learn** instance. Supp
 
 - Works with any Blackboard Learn school (just enter your domain)
 - Lists all your terms and lets you pick which one to download
+- Pick exactly which modules to download (or use `--courses` to script it)
 - Preserves top-level folder structure from Blackboard
 - Skips files you've already downloaded
 - Supports any file type: PDF, PPTX, DOCX, etc.
@@ -40,6 +41,7 @@ The script will ask for:
 1. Your Blackboard domain (e.g. `learn.bu.edu`)
 2. File types to download (default: `.pdf`)
 3. Which term to download
+4. Which modules within that term (e.g. `1,3,5` or `1-3` or `all`)
 
 ### Command-line flags
 
@@ -55,6 +57,7 @@ python3 bb_downloader.py \
 | `--url` | Blackboard domain | prompted |
 | `--output` | Download folder | `~/Downloads/Blackboard` |
 | `--ext` | File extensions | prompted (default `.pdf`) |
+| `--courses` | Course names/IDs to download (substring match). Skips the interactive picker. | prompted |
 
 ### Output structure
 
